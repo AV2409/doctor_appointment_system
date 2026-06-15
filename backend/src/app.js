@@ -3,10 +3,11 @@ import cors from "cors"
 import cookieParser from "cookie-parser"
 import { errorHandler } from "./utils/ApiError.js"
 
-// Routes will be imported and mounted in later phases
+import userRouter from "./routes/userRoute.js"
+
+// Doctor and admin routes will be mounted in later phases:
 // import adminRouter from "./routes/adminRoute.js"
 // import doctorRouter from "./routes/doctorRoute.js"
-// import userRouter from "./routes/userRoute.js"
 
 const app = express()
 
@@ -26,10 +27,12 @@ app.use(express.urlencoded({ extended: true, limit: "16kb" }))
 app.use(express.static("public"))
 app.use(cookieParser())
 
-// ─── Routes (mounted in later phases) ────────────────────────────────────────
+// ─── Routes ──────────────────────────────────────────────────────────────────
+app.use("/api/user", userRouter)
+
+// Doctor and admin routes mounted in later phases:
 // app.use("/api/admin", adminRouter)
 // app.use("/api/doctor", doctorRouter)
-// app.use("/api/user", userRouter)
 
 // ─── Global error handler — must be LAST ─────────────────────────────────────
 // Catches anything forwarded by asyncHandler's next(err).
