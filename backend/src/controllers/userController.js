@@ -296,13 +296,18 @@ const cancelAppointment = asyncHandler(async (req, res) => {
   if (!appointmentData) {
     throw new ApiError(404, "Appointment not found");
   }
+  // Ownership check FIRST — prevents leaking cancellation state to a user
+  // who has no business knowing this appointment's status
+  if (appointmentData.userId.toString() !== userId) {
+    throw new ApiError(403, "Unauthorized action");
+  }
   // Bug 3 fix: prevent redundant slot-release on already-cancelled appointments
   if (appointmentData.cancelled) {
     throw new ApiError(400, "Appointment already cancelled");
   }
-  // Compare as strings — appointmentData.userId is an ObjectId
-  if (appointmentData.userId.toString() !== userId) {
-    throw new ApiError(403, "Unauthorized action");
+
+  if (appointmentData.isCompleted) {
+    throw new ApiError(400, "Completed appointments cannot be cancelled");
   }
 
   await appointmentModel.findByIdAndUpdate(appointmentId, { cancelled: true });
@@ -310,8 +315,12 @@ const cancelAppointment = asyncHandler(async (req, res) => {
   // Release the slot back on the doctor's record
   const { docId, slotDate, slotTime } = appointmentData;
   const docData = await doctorModel.findById(docId);
+  if (!docData) {
+    throw new ApiError(404, "Doctor not found");
+  }
   const slots_booked = docData.slots_booked;
-  slots_booked[slotDate] = slots_booked[slotDate].filter(
+  // Defensive fallback — avoids TypeError if slotDate key is missing
+  slots_booked[slotDate] = (slots_booked[slotDate] || []).filter(
     (t) => t !== slotTime,
   );
   await doctorModel.findByIdAndUpdate(docId, { slots_booked });
