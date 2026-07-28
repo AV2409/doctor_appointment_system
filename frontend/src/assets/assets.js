@@ -12,31 +12,23 @@
  * When you have production images, import them normally and swap the values.
  */
 
-// ---------------------------------------------------------------------------
-// Asset object — maps to the original build-guide asset names
-// ---------------------------------------------------------------------------
 export const assets = {
-  // Header / hero
-  logo: 'https://placehold.co/160x50/5F6FFF/ffffff?text=Prescripto&font=outfit',
+  logo: 'https://placehold.co/160x50/5F6FFF/ffffff?text=MediSync&font=outfit',
   header_img: 'https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=600&auto=format&fit=crop',
   group_profiles:
     'https://placehold.co/120x40/e0e7ff/5F6FFF?text=●●●●&font=roboto',
 
-  // Banner / CTA
   appointment_img:
     'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=500&auto=format&fit=crop',
 
-  // About / Contact
   about_image:
     'https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=800&auto=format&fit=crop',
   contact_image:
     'https://images.unsplash.com/photo-1584820927498-cfe5211fd8bf?w=800&auto=format&fit=crop',
 
-  // Default profile
   profile_pic:
     'https://placehold.co/150x150/e0e7ff/5F6FFF?text=User&font=outfit',
 
-  // Icons (inline SVG data URIs for zero-dependency icons)
   dropdown_icon:
     "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236B7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E",
 
@@ -61,16 +53,12 @@ export const assets = {
   upload_icon:
     "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12' stroke='%235F6FFF' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E",
 
-  // Payment logos
   stripe_logo:
     'https://placehold.co/100x32/ffffff/635bff?text=stripe&font=outfit',
   razorpay_logo:
     'https://placehold.co/100x32/ffffff/3395FF?text=razorpay&font=outfit',
 }
 
-// ---------------------------------------------------------------------------
-// Speciality data — 6 specialities used in the SpecialityMenu component
-// ---------------------------------------------------------------------------
 export const specialityData = [
   {
     speciality: 'General physician',
@@ -104,16 +92,9 @@ export const specialityData = [
   },
 ]
 
-// ---------------------------------------------------------------------------
-// Helper to generate a doctor photo URL
-// ---------------------------------------------------------------------------
 const doctorPhoto = (seed, gender = 'men') =>
   `https://randomuser.me/api/portraits/${gender}/${seed}.jpg`
 
-// ---------------------------------------------------------------------------
-// doctors array — 15 doctors, mirrors the MongoDB document shape
-// Used locally until backend is connected.
-// ---------------------------------------------------------------------------
 export const doctors = [
   {
     _id: 'doc1',

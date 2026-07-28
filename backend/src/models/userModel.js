@@ -11,10 +11,9 @@ const userSchema = new mongoose.Schema({
   gender:   { type: String, default: "Not Selected" },
   dob:      { type: String, default: "Not Selected" },
   phone:    { type: String, default: "0000000000" },
-  refreshToken: { type: String }   // stores the current valid refresh token
+  refreshToken: { type: String }
 }, { timestamps: true })
 
-// Hash password only when it is modified
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next()
   this.password = await bcrypt.hash(this.password, 10)
@@ -25,8 +24,6 @@ userSchema.methods.isPasswordCorrect = async function (password) {
   return await bcrypt.compare(password, this.password)
 }
 
-// Short-lived — used for every API request
-// Payload includes role so auth.middleware.js can route to the correct model
 userSchema.methods.generateAccessToken = function () {
   return jwt.sign(
     { _id: this._id, role: "USER" },
@@ -35,7 +32,6 @@ userSchema.methods.generateAccessToken = function () {
   )
 }
 
-// Long-lived — only used to get a new access token
 userSchema.methods.generateRefreshToken = function () {
   return jwt.sign(
     { _id: this._id, role: "USER" },

@@ -16,7 +16,7 @@ const doctorSchema = new mongoose.Schema({
   address:     { type: Object, required: true },
   date:        { type: Number, required: true },
   slots_booked: { type: Object, default: {}, minimize: false },
-  refreshToken: { type: String }   // stores doctor's current valid refresh token
+  refreshToken: { type: String }
 }, { timestamps: true })
 
 doctorSchema.pre("save", async function (next) {
@@ -29,7 +29,6 @@ doctorSchema.methods.isPasswordCorrect = async function (password) {
   return await bcrypt.compare(password, this.password)
 }
 
-// Payload includes role: "DOCTOR" — same shape as user tokens
 doctorSchema.methods.generateAccessToken = function () {
   return jwt.sign(
     { _id: this._id, role: "DOCTOR" },

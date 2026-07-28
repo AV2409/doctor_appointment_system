@@ -1,42 +1,45 @@
 import React, { useContext, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import axios from 'axios'
 import { toast } from 'react-toastify'
 import { AppContext } from '../context/AppContext'
+import { assets } from '../assets/assets'
+import axiosInstance from '../utils/axiosInstance'
+import { getErrorMessage } from '../utils/getErrorMessage'
 
 const MyAppointments = () => {
-  const { backendUrl, token, getDoctorsData, slotDateFormat, currencySymbol } =
-    useContext(AppContext)
+  const { getDoctorsData, slotDateFormat, currencySymbol, token } = useContext(AppContext)
 
   const [appointments, setAppointments] = useState([])
+  const [processingPayment, setProcessingPayment] = useState(null) // appointmentId being processed, or null
   const navigate = useNavigate()
 
-  // ── Fetch user's appointments ─────────────────────────────────────────────
+  useEffect(() => {
+    if (token === false) navigate('/login')
+  }, [token])
+
   const getUserAppointments = async () => {
     try {
-      const { data } = await axios.get(backendUrl + '/api/user/appointments', {
-        headers: { token },
-      })
+      const { data } = await axiosInstance.get('/api/user/appointments')
       if (data.success) {
-        setAppointments(data.appointments.reverse())
+        setAppointments([...data.data].reverse())
       }
     } catch (error) {
-      toast.error(error.message)
+      console.error(error)
+      toast.error(getErrorMessage(error))
     }
   }
 
   useEffect(() => {
-    if (token) getUserAppointments()
+    if (token) {
+      ;(async () => { await getUserAppointments() })()
+    }
   }, [token])
 
-  // ── Cancel appointment ────────────────────────────────────────────────────
   const cancelAppointment = async (appointmentId) => {
     try {
-      const { data } = await axios.post(
-        backendUrl + '/api/user/cancel-appointment',
-        { appointmentId },
-        { headers: { token } }
-      )
+      const { data } = await axiosInstance.post('/api/user/cancel-appointment', {
+        appointmentId,
+      })
       if (data.success) {
         toast.success(data.message)
         getUserAppointments()
@@ -45,52 +48,60 @@ const MyAppointments = () => {
         toast.error(data.message)
       }
     } catch (error) {
-      toast.error(error.message)
+      console.error(error)
+      toast.error(getErrorMessage(error))
     }
   }
 
-  // ── Razorpay payment flow ─────────────────────────────────────────────────
   const initPay = (order) => {
     const options = {
-      key: import.meta.env.VITE_RAZORPAY_KEY_ID,
-      amount: order.amount,
-      currency: order.currency,
-      name: 'Appointment Payment',
+      key:         order.key,
+      amount:      order.amount,
+      currency:    order.currency,
+      name:        'MediSync',
       description: 'Appointment Payment',
-      order_id: order.id,
-      receipt: order.receipt,
-      handler: async (response) => {
+      order_id:    order.orderId,
+
+      handler: async function (response) {
         try {
-          const { data } = await axios.post(
-            backendUrl + '/api/user/verifyRazorpay',
-            response,
-            { headers: { token } }
-          )
+          const { data } = await axiosInstance.post('/api/user/verifyRazorpay', response)
           if (data.success) {
-            getUserAppointments()
-            navigate('/my-appointments')
+            toast.success('Payment Successful')
+            await getUserAppointments()
           }
         } catch (error) {
-          toast.error(error.message)
+          console.error(error)
+          toast.error(getErrorMessage(error))
         }
       },
     }
-    const rzp = new window.Razorpay(options)
-    rzp.open()
+
+    const razorpay = new window.Razorpay(options)
+
+    razorpay.on('payment.failed', function (response) {
+      console.error(response)
+      toast.error('Payment Failed')
+    })
+
+    razorpay.open()
   }
 
   const appointmentRazorpay = async (appointmentId) => {
+    setProcessingPayment(appointmentId)   // disable + show "Processing…" on this button
     try {
-      const { data } = await axios.post(
-        backendUrl + '/api/user/payment-razorpay',
-        { appointmentId },
-        { headers: { token } }
-      )
+      const { data } = await axiosInstance.post('/api/user/payment-razorpay', {
+        appointmentId,
+      })
       if (data.success) {
-        initPay(data.order)
+        initPay(data.data)
+      } else {
+        toast.error(data.message)
       }
     } catch (error) {
-      toast.error(error.message)
+      console.error(error)
+      toast.error(getErrorMessage(error))
+    } finally {
+      setProcessingPayment(null)          // always re-enable after backend responds
     }
   }
 
@@ -115,16 +126,16 @@ const MyAppointments = () => {
             </p>
           </div>
         ) : (
-          appointments.map((item, index) => (
+          appointments.map((item) => (
             <div
-              key={index}
+              key={item._id}
               className='grid grid-cols-[1fr_2fr] gap-4 sm:flex sm:gap-6 py-4 border-b'
             >
               {/* Doctor photo */}
               <div>
                 <img
                   className='w-32 bg-indigo-50 rounded'
-                  src={item.docData?.image}
+                  src={item.docData?.image || assets.profile_pic}
                   alt={item.docData?.name}
                 />
               </div>
@@ -144,7 +155,7 @@ const MyAppointments = () => {
                 {/* Date + time */}
                 <p className='text-xs mt-1'>
                   <span className='text-sm text-neutral-700 font-medium'>
-                    Date & Time:
+                    Date &amp; Time:
                   </span>{' '}
                   {slotDateFormat(item.slotDate)} | {item.slotTime}
                 </p>
@@ -152,42 +163,57 @@ const MyAppointments = () => {
 
               {/* Action buttons — right column */}
               <div className='flex flex-col gap-2 justify-end text-sm text-center'>
-                {/* ── Completed state ── */}
+
+                {/* ── 1. Completed ──────────────────────────────────────── */}
                 {item.isCompleted && (
-                  <button className='sm:min-w-48 py-2 border rounded text-green-500 bg-green-50 cursor-default'>
-                    Completed
-                  </button>
+                  <>
+                    <button className='sm:min-w-48 py-2 border rounded text-green-500 bg-green-50 cursor-default'>
+                      Completed
+                    </button>
+                    {/* Also show Paid badge on completed+paid appointments */}
+                    {item.payment && (
+                      <button className='sm:min-w-48 py-2 border rounded text-green-500 bg-green-50 cursor-default'>
+                        Paid
+                      </button>
+                    )}
+                  </>
                 )}
 
-                {/* ── Cancelled state ── */}
+                {/* ── 2. Cancelled — no Pay Online shown ───────────────── */}
                 {item.cancelled && !item.isCompleted && (
                   <button className='sm:min-w-48 py-2 border rounded text-red-500 bg-red-50 cursor-default'>
                     Appointment Cancelled
                   </button>
                 )}
 
-                {/* ── Active: pay + cancel ── */}
+                {/* ── 3 & 4. Active (not cancelled, not completed) ─────── */}
                 {!item.cancelled && !item.isCompleted && (
                   <>
                     {item.payment ? (
+                      /* 3. Active + paid → Paid badge (no Pay Online) */
                       <button className='sm:min-w-48 py-2 border rounded text-green-500 bg-green-50 cursor-default'>
                         Paid
                       </button>
                     ) : (
+                      /* 4. Active + unpaid → Pay Online button with loading state */
                       <button
                         onClick={() => appointmentRazorpay(item._id)}
-                        className='sm:min-w-48 py-2 border rounded text-stone-500 bg-stone-100 hover:bg-primary hover:text-white transition-all'
+                        disabled={processingPayment === item._id}
+                        className='sm:min-w-48 py-2 border rounded text-stone-500 bg-stone-100 hover:bg-primary hover:text-white transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-stone-100 disabled:hover:text-stone-500'
                       >
-                        Pay Online
+                        {processingPayment === item._id ? 'Processing...' : 'Pay Online'}
                       </button>
                     )}
 
-                    <button
-                      onClick={() => cancelAppointment(item._id)}
-                      className='sm:min-w-48 py-2 border rounded text-stone-500 bg-stone-100 hover:bg-red-600 hover:text-white transition-all'
-                    >
-                      Cancel appointment
-                    </button>
+                    {/* Cancel button — hidden for paid appointments */}
+                    {!item.payment && (
+                      <button
+                        onClick={() => cancelAppointment(item._id)}
+                        className='sm:min-w-48 py-2 border rounded text-stone-500 bg-stone-100 hover:bg-red-600 hover:text-white transition-all'
+                      >
+                        Cancel appointment
+                      </button>
+                    )}
                   </>
                 )}
               </div>

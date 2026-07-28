@@ -1,8 +1,9 @@
 import React, { useContext, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import axios from 'axios'
 import { toast } from 'react-toastify'
 import { AppContext } from '../context/AppContext'
+import axiosInstance from '../utils/axiosInstance' // replaces raw axios
+import { getErrorMessage } from '../utils/getErrorMessage'
 
 const Login = () => {
   const [state, setState]       = useState('Sign Up')
@@ -10,10 +11,9 @@ const Login = () => {
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
 
-  const { token, setToken, backendUrl } = useContext(AppContext)
+  const { token, setToken } = useContext(AppContext)
   const navigate = useNavigate()
 
-  // Already logged in → go home
   useEffect(() => {
     if (token) navigate('/')
   }, [token])
@@ -22,31 +22,33 @@ const Login = () => {
     event.preventDefault()
     try {
       if (state === 'Sign Up') {
-        const { data } = await axios.post(backendUrl + '/api/user/register', {
+        const { data } = await axiosInstance.post('/api/user/register', {
           name,
           email,
           password,
         })
         if (data.success) {
-          localStorage.setItem('token', data.token)
-          setToken(data.token)
+          localStorage.setItem('accessToken', data.data.accessToken)
+          setToken(data.data.accessToken)
         } else {
           toast.error(data.message)
         }
-      } else {
-        const { data } = await axios.post(backendUrl + '/api/user/login', {
+      } 
+      else {
+        const { data } = await axiosInstance.post('/api/user/login', {
           email,
           password,
         })
         if (data.success) {
-          localStorage.setItem('token', data.token)
-          setToken(data.token)
+          localStorage.setItem('accessToken', data.data.accessToken)
+          setToken(data.data.accessToken)
         } else {
           toast.error(data.message)
         }
       }
     } catch (error) {
-      toast.error(error.message)
+      console.error(error)
+      toast.error(getErrorMessage(error))
     }
   }
 
@@ -146,3 +148,16 @@ const Login = () => {
 }
 
 export default Login
+
+
+
+
+
+
+
+
+
+
+
+
+

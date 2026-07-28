@@ -1,24 +1,25 @@
 import React, { useContext, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import axios from 'axios'
 import { toast } from 'react-toastify'
 import { AppContext } from '../context/AppContext'
 import { assets } from '../assets/assets'
 import RelatedDoctors from '../components/RelatedDoctors'
+import axiosInstance from '../utils/axiosInstance' // replaces raw axios
+import { getErrorMessage } from '../utils/getErrorMessage'
 
 const daysOfWeek = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
 
 const Appointment = () => {
   const { docId } = useParams()
-  const { doctors, currencySymbol, backendUrl, token, getDoctorsData } = useContext(AppContext)
+  const { doctors, currencySymbol, token, getDoctorsData } = useContext(AppContext)
   const navigate = useNavigate()
 
   const [docInfo, setDocInfo]     = useState(null)
   const [docSlots, setDocSlots]   = useState([])   // array of arrays: 7 days × N slots
   const [slotIndex, setSlotIndex] = useState(0)    // selected day index
   const [slotTime, setSlotTime]   = useState('')   // selected time string
+  const [isBooking, setIsBooking] = useState(false) // prevents duplicate submissions
 
-  // ── 1. Fetch doctor info from context ──────────────────────────────────────
   const fetchDocInfo = () => {
     const doc = doctors.find(d => d._id === docId)
     setDocInfo(doc || null)
@@ -28,7 +29,6 @@ const Appointment = () => {
     fetchDocInfo()
   }, [doctors, docId])
 
-  // ── 2. Generate available slots (next 7 days, 10 am – 9 pm, 30-min steps) ──
   const getAvailableSlots = () => {
     setDocSlots([])
     const today = new Date()
@@ -41,7 +41,6 @@ const Appointment = () => {
       endTime.setDate(today.getDate() + i)
       endTime.setHours(21, 0, 0, 0)
 
-      // For today, start from the next hour (or 10 am, whichever is later)
       if (today.getDate() === currentDate.getDate()) {
         currentDate.setHours(
           currentDate.getHours() > 10 ? currentDate.getHours() + 1 : 10
@@ -65,7 +64,6 @@ const Appointment = () => {
         const year = currentDate.getFullYear()
         const slotDate = `${day}_${month}_${year}`
 
-        // Mark slot unavailable if already booked in doctor's slots_booked map
         const isSlotAvailable = !(
           docInfo?.slots_booked?.[slotDate]?.includes(formattedTime)
         )
@@ -85,18 +83,22 @@ const Appointment = () => {
     if (docInfo) getAvailableSlots()
   }, [docInfo])
 
-  // ── 3. Book appointment ────────────────────────────────────────────────────
   const bookAppointment = async () => {
     if (!token) {
       toast.warn('Login to book appointment')
       return navigate('/login')
     }
-    
-    if (!slotTime || !docSlots[slotIndex]?.length) {
-    toast.error('Please select an available time slot')
-    return
-  }
 
+    if (!slotTime) {
+      toast.error('Please select a time slot')
+      return
+    }
+    if (!docSlots[slotIndex]?.length) {
+      toast.error('No slots available for the selected day. Please choose another day.')
+      return
+    }
+
+    setIsBooking(true)
     try {
       const date = docSlots[slotIndex][0].datetime
       const day = date.getDate()
@@ -104,11 +106,11 @@ const Appointment = () => {
       const year = date.getFullYear()
       const slotDate = `${day}_${month}_${year}`
 
-      const { data } = await axios.post(
-        backendUrl + '/api/user/book-appointment',
-        { docId, slotDate, slotTime },
-        { headers: { token } }
-      )
+      const { data } = await axiosInstance.post('/api/user/book-appointment', {
+        docId,
+        slotDate,
+        slotTime,
+      })
 
       if (data.success) {
         toast.success(data.message)
@@ -118,12 +120,13 @@ const Appointment = () => {
         toast.error(data.message)
       }
     } catch (error) {
-      console.log(error)
-      toast.error(error.message)
+      console.error(error)
+      toast.error(getErrorMessage(error))
+    } finally {
+      setIsBooking(false)
     }
   }
 
-  // ── Loading guard ──────────────────────────────────────────────────────────
   if (!docInfo) {
     return (
       <div className='flex items-center justify-center min-h-[60vh] text-gray-400'>
@@ -141,7 +144,7 @@ const Appointment = () => {
         <div>
           <img
             className='bg-primary w-full sm:max-w-72 rounded-lg object-cover object-top'
-            src={docInfo.image}
+            src={docInfo.image || assets.profile_pic}
             alt={docInfo.name}
           />
         </div>
@@ -229,13 +232,20 @@ const Appointment = () => {
             ))}
         </div>
 
+        {/* ── No slots message ── */}
+        {docSlots.length > 0 && docSlots[slotIndex]?.length === 0 && (
+          <p className='text-sm text-gray-400 mt-4'>
+            No available slots for this day. Please select another day.
+          </p>
+        )}
+
         {/* ── Book button ── */}
         <button
           onClick={bookAppointment}
-          className='bg-primary text-white text-sm font-light px-14 py-3 rounded-full my-6 hover:opacity-90 transition-opacity disabled:opacity-50'
-          disabled={!slotTime}
+          className='bg-primary text-white text-sm font-light px-14 py-3 rounded-full my-6 hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed'
+          disabled={!slotTime || isBooking}
         >
-          Book an Appointment
+          {isBooking ? 'Booking...' : 'Book an Appointment'}
         </button>
       </div>
 
@@ -246,3 +256,40 @@ const Appointment = () => {
 }
 
 export default Appointment
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

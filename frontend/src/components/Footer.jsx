@@ -10,9 +10,9 @@ const Footer = () => {
 
         {/* Left — brand + description */}
         <div>
-          <img className='mb-5 w-40' src={assets.logo} alt='Prescripto logo' />
+          <img className='mb-5 w-40' src={assets.logo} alt='MediSync logo' />
           <p className='w-full md:w-2/3 text-gray-600 leading-6'>
-            Prescripto is your trusted partner in managing your healthcare needs
+            MediSync is your trusted partner in managing your healthcare needs
             conveniently and efficiently. We connect patients with qualified
             doctors, making quality healthcare accessible to everyone.
           </p>
@@ -60,10 +60,10 @@ const Footer = () => {
             </li>
             <li>
               <a
-                href='mailto:prescripto@gmail.com'
+                href='mailto:medisync@gmail.com'
                 className='hover:text-primary transition-colors'
               >
-                prescripto@gmail.com
+                medisync@gmail.com
               </a>
             </li>
           </ul>
@@ -74,7 +74,7 @@ const Footer = () => {
       <div>
         <hr className='border-gray-200' />
         <p className='py-5 text-sm text-center text-gray-500'>
-          © {new Date().getFullYear()} Prescripto. All rights reserved.
+          © {new Date().getFullYear()} MediSync. All rights reserved.
         </p>
       </div>
     </footer>

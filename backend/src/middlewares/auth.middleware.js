@@ -5,10 +5,6 @@ import userModel from "../models/userModel.js";
 import doctorModel from "../models/doctorModel.js";
 
 export const verifyJWT = asyncHandler(async (req, _, next) => {
-  // Support three token delivery methods for full frontend compatibility:
-  // 1. httpOnly cookie (new — most secure)
-  // 2. Authorization: Bearer header (standard)
-  // 3. req.headers.token (legacy — existing frontend sends this)
   const token =
     req.cookies?.accessToken ||
     req.header("Authorization")?.replace("Bearer ", "") ||
@@ -39,7 +35,6 @@ export const verifyJWT = asyncHandler(async (req, _, next) => {
       if (!doctor) throw new ApiError(401, "Invalid access token");
       req.user = { ...doctor.toObject(), role: "DOCTOR" };
     } else if (role === "ADMIN") {
-      // Admin has no DB entry — validate the embedded email against env
       if (decodedToken.email !== process.env.ADMIN_EMAIL) {
         throw new ApiError(403, "Not authorized as admin");
       }

@@ -2,9 +2,8 @@ import React, { useContext, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AppContext } from '../context/AppContext'
 
-// All speciality options — mirrors the sidebar list from the build guide
 const SPECIALITIES = [
-  'General physician',
+  'General Physician',
   'Gynecologist',
   'Dermatologist',
   'Pediatricians',
@@ -19,10 +18,9 @@ const Doctors = () => {
   const { doctors } = useContext(AppContext)
   const navigate = useNavigate()
 
-  // Re-apply the filter whenever the route param or doctors list changes
   const applyFilter = () => {
     if (speciality) {
-      setFilterDoc(doctors.filter(doc => doc.speciality === speciality))
+      setFilterDoc(doctors.filter(doc => doc.speciality.toLowerCase() === speciality.toLowerCase()))
     } else {
       setFilterDoc(doctors)
     }
@@ -59,7 +57,6 @@ const Doctors = () => {
             <p
               key={item}
               onClick={() =>
-                // Toggle: clicking active filter clears it
                 speciality === item
                   ? navigate('/doctors')
                   : navigate(`/doctors/${item}`)

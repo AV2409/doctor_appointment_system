@@ -5,20 +5,23 @@ import userModel from "../models/userModel.js";
 import appointmentModel from "../models/appointmentModel.js";
 import doctorModel from "../models/doctorModel.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
+import { razorpayInstance } from "../utils/razorpay.js";
 import validator from "validator";
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
+import {
+  sendBookingEmails,
+  sendCancellationEmails,
+  sendWelcomeEmail,
+  sendPaymentEmails,
+} from "../utils/appointmentEmails.js";
 
-// ─── Cookie options ─────────────────────────────────────────────────────────
-// secure: true only in production (HTTPS) — allows cookies over HTTP in dev
-// sameSite: "none" in production (required for cross-origin cookie sending)
-//           "lax" in development (works on localhost without HTTPS)
 const cookieOptions = {
   httpOnly: true,
   secure: process.env.NODE_ENV === "production",
   sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
 };
 
-// ─── Helper: generate both tokens and save refresh token to DB ───────────────
 const generateAccessAndRefreshTokens = async (userId) => {
   const user = await userModel.findById(userId);
   const accessToken = user.generateAccessToken();
@@ -30,7 +33,6 @@ const generateAccessAndRefreshTokens = async (userId) => {
   return { accessToken, refreshToken };
 };
 
-// ─── Register ────────────────────────────────────────────────────────────────
 const registerUser = asyncHandler(async (req, res) => {
   const { name, email, password } = req.body;
 
@@ -58,6 +60,8 @@ const registerUser = asyncHandler(async (req, res) => {
     .findById(user._id)
     .select("-password -refreshToken");
 
+  sendWelcomeEmail(createdUser);
+
   return res
     .status(201)
     .cookie("accessToken", accessToken, cookieOptions)
@@ -71,7 +75,6 @@ const registerUser = asyncHandler(async (req, res) => {
     );
 });
 
-// ─── Login ───────────────────────────────────────────────────────────────────
 const loginUser = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
 
@@ -109,7 +112,6 @@ const loginUser = asyncHandler(async (req, res) => {
     );
 });
 
-// ─── Logout ──────────────────────────────────────────────────────────────────
 const logoutUser = asyncHandler(async (req, res) => {
   await userModel.findByIdAndUpdate(
     req.user._id,
@@ -124,7 +126,6 @@ const logoutUser = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, {}, "Logged out successfully"));
 });
 
-// ─── Refresh Access Token ─────────────────────────────────────────────────────
 const refreshAccessToken = asyncHandler(async (req, res) => {
   const incomingRefreshToken =
     req.cookies?.refreshToken || req.body.refreshToken;
@@ -143,7 +144,6 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
     throw new ApiError(401, error.message || "Invalid refresh token");
   }
 
-  // Explicit role guard — prevents a DOCTOR or ADMIN token from being used here
   if (decodedToken.role !== "USER") {
     throw new ApiError(401, "Invalid refresh token for this endpoint");
   }
@@ -153,7 +153,6 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
     throw new ApiError(401, "Invalid refresh token");
   }
 
-  // Reject if token does not match what is stored in DB (rotation check)
   if (incomingRefreshToken !== user.refreshToken) {
     throw new ApiError(
       401,
@@ -177,7 +176,6 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
     );
 });
 
-// ─── Get Profile ──────────────────────────────────────────────────────────────
 const getProfile = asyncHandler(async (req, res) => {
   const userData = await userModel
     .findById(req.user._id)
@@ -187,7 +185,6 @@ const getProfile = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, userData, "Profile fetched successfully"));
 });
 
-// ─── Update Profile ───────────────────────────────────────────────────────────
 const updateProfile = asyncHandler(async (req, res) => {
   const { name, phone, address, dob, gender } = req.body;
   const imageFile = req.file;
@@ -203,7 +200,6 @@ const updateProfile = asyncHandler(async (req, res) => {
     gender,
   };
 
-  // Bug 4 fix: safe JSON.parse — malformed address from frontend won't crash the server
   let parsedAddress;
   try {
     parsedAddress = JSON.parse(address);
@@ -227,13 +223,14 @@ const updateProfile = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, {}, "Profile updated successfully"));
 });
 
-// ─── Book Appointment ─────────────────────────────────────────────────────────
 const bookAppointment = asyncHandler(async (req, res) => {
   const { docId, slotDate, slotTime } = req.body;
   const userId = req.user._id;
 
-  const docData = await doctorModel.findById(docId).select("-password");
-  // Bug 1 fix: null check before accessing .available
+  const docData = await doctorModel
+    .findById(docId)
+    .select("-password -refreshToken");
+
   if (!docData) {
     throw new ApiError(404, "Doctor not found");
   }
@@ -241,20 +238,30 @@ const bookAppointment = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Doctor is not available");
   }
 
-  const slots_booked = docData.slots_booked;
-  if (slots_booked[slotDate]?.includes(slotTime)) {
-    throw new ApiError(400, "This slot is already booked");
-  }
+  const slotArrayPath = `slots_booked.${slotDate}`;
 
-  // Add slot to doctor's booked list
-  if (!slots_booked[slotDate]) slots_booked[slotDate] = [];
-  slots_booked[slotDate].push(slotTime);
+  const claimed = await doctorModel.findOneAndUpdate(
+    {
+      _id: docId,
+      [slotArrayPath]: { $ne: slotTime },
+    },
+    {
+      $push: { [slotArrayPath]: slotTime },
+    },
+    { new: true },
+  );
+
+  if (!claimed) {
+    throw new ApiError(
+      409,
+      "This slot was just booked. Please select another time.",
+    );
+  }
 
   const userData = await userModel
     .findById(userId)
     .select("-password -refreshToken");
 
-  // Remove slots_booked before storing in appointment snapshot
   const docDataSnapshot = docData.toObject();
   delete docDataSnapshot.slots_booked;
 
@@ -269,14 +276,13 @@ const bookAppointment = asyncHandler(async (req, res) => {
     date: Date.now(),
   });
 
-  await doctorModel.findByIdAndUpdate(docId, { slots_booked });
+  sendBookingEmails(appointment);
 
   return res
     .status(201)
     .json(new ApiResponse(201, appointment, "Appointment booked successfully"));
 });
 
-// ─── List User Appointments ───────────────────────────────────────────────────
 const listAppointments = asyncHandler(async (req, res) => {
   const appointments = await appointmentModel.find({ userId: req.user._id });
   return res
@@ -286,48 +292,152 @@ const listAppointments = asyncHandler(async (req, res) => {
     );
 });
 
-// ─── Cancel Appointment ───────────────────────────────────────────────────────
 const cancelAppointment = asyncHandler(async (req, res) => {
   const { appointmentId } = req.body;
   const userId = req.user._id.toString();
 
   const appointmentData = await appointmentModel.findById(appointmentId);
-  // Bug 2 fix: null check before accessing .userId
   if (!appointmentData) {
     throw new ApiError(404, "Appointment not found");
   }
-  // Ownership check FIRST — prevents leaking cancellation state to a user
-  // who has no business knowing this appointment's status
   if (appointmentData.userId.toString() !== userId) {
     throw new ApiError(403, "Unauthorized action");
   }
-  // Bug 3 fix: prevent redundant slot-release on already-cancelled appointments
-  if (appointmentData.cancelled) {
-    throw new ApiError(400, "Appointment already cancelled");
-  }
-
   if (appointmentData.isCompleted) {
     throw new ApiError(400, "Completed appointments cannot be cancelled");
   }
+  if (appointmentData.payment) {
+    throw new ApiError(400, "Paid appointments cannot be cancelled");
+  }
 
-  await appointmentModel.findByIdAndUpdate(appointmentId, { cancelled: true });
+  const cancelled = await appointmentModel.findOneAndUpdate(
+    {
+      _id: appointmentId,
+      userId: userId,
+      cancelled: false,
+      isCompleted: false,
+      payment: false,
+    },
+    { cancelled: true },
+    { new: true },
+  );
 
-  // Release the slot back on the doctor's record
+  if (!cancelled) {
+    throw new ApiError(
+      409,
+      "Appointment was already cancelled by another request",
+    );
+  }
+
   const { docId, slotDate, slotTime } = appointmentData;
   const docData = await doctorModel.findById(docId);
   if (!docData) {
     throw new ApiError(404, "Doctor not found");
   }
   const slots_booked = docData.slots_booked;
-  // Defensive fallback — avoids TypeError if slotDate key is missing
   slots_booked[slotDate] = (slots_booked[slotDate] || []).filter(
     (t) => t !== slotTime,
   );
   await doctorModel.findByIdAndUpdate(docId, { slots_booked });
 
+  sendCancellationEmails(appointmentData, "PATIENT");
+
   return res
     .status(200)
     .json(new ApiResponse(200, {}, "Appointment cancelled successfully"));
+});
+
+const paymentRazorpay = asyncHandler(async (req, res) => {
+  const { appointmentId } = req.body;
+
+  const appointment = await appointmentModel.findById(appointmentId);
+  if (!appointment) {
+    throw new ApiError(404, "Appointment not found");
+  }
+
+  if (appointment.userId.toString() !== req.user._id.toString()) {
+    throw new ApiError(403, "Unauthorized action");
+  }
+
+  if (appointment.cancelled) {
+    throw new ApiError(400, "Appointment cancelled");
+  }
+
+  if (appointment.payment) {
+    throw new ApiError(400, "Appointment already paid");
+  }
+
+  let order;
+  try {
+    order = await razorpayInstance.orders.create({
+      amount: appointment.amount * 100,
+      currency: process.env.CURRENCY,
+      receipt: appointment._id.toString(),
+    });
+  } catch (rzpErr) {
+    const description =
+      rzpErr?.error?.description ||
+      rzpErr?.message ||
+      "Razorpay order creation failed";
+    throw new ApiError(502, `Payment gateway error: ${description}`);
+  }
+
+  appointment.orderId = order.id;
+  await appointment.save({ validateBeforeSave: false });
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      {
+        key: process.env.RAZORPAY_KEY_ID,
+        orderId: order.id,
+        amount: order.amount,
+        currency: order.currency,
+      },
+      "Razorpay order created successfully",
+    ),
+  );
+});
+
+const verifyRazorpay = asyncHandler(async (req, res) => {
+  const { razorpay_order_id, razorpay_payment_id, razorpay_signature } =
+    req.body;
+
+  if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+    throw new ApiError(400, "Missing payment details");
+  }
+
+  const expectedSignature = crypto
+    .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+    .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+    .digest("hex");
+
+  if (expectedSignature !== razorpay_signature) {
+    throw new ApiError(400, "Invalid payment signature");
+  }
+
+  const appointment = await appointmentModel.findOne({
+    orderId: razorpay_order_id,
+  });
+  if (!appointment) {
+    throw new ApiError(404, "Appointment not found");
+  }
+
+  if (appointment.payment) {
+    return res
+      .status(200)
+      .json(new ApiResponse(200, {}, "Payment verified successfully"));
+  }
+
+  appointment.payment = true;
+  appointment.paymentId = razorpay_payment_id;
+  await appointment.save({ validateBeforeSave: false });
+
+  sendPaymentEmails(appointment);
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, {}, "Payment verified successfully"));
 });
 
 export {
@@ -340,4 +450,6 @@ export {
   bookAppointment,
   listAppointments,
   cancelAppointment,
+  paymentRazorpay,
+  verifyRazorpay,
 };

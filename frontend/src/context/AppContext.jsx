@@ -1,78 +1,78 @@
 import { createContext, useEffect, useState } from 'react'
-import axios from 'axios'
 import { toast } from 'react-toastify'
-import { doctors as mockDoctors } from '../assets/assets'
+import axiosInstance from '../utils/axiosInstance' // replaces raw axios
+import { getErrorMessage } from '../utils/getErrorMessage'
 
 export const AppContext = createContext()
 
 const AppContextProvider = (props) => {
-  const currencySymbol = '$'
-  const backendUrl = import.meta.env.VITE_BACKEND_URL
+  const currencySymbol = '₹'
 
-  // Start with mock data; once backend is live, this gets replaced by API response
-  const [doctors, setDoctors] = useState(mockDoctors)
+  const [doctors, setDoctors] = useState([])
   const [token, setToken] = useState(
-    localStorage.getItem('token') ? localStorage.getItem('token') : false
+    localStorage.getItem('accessToken') ? localStorage.getItem('accessToken') : false
   )
   const [userData, setUserData] = useState(false)
 
   const months = [
     '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
   ]
 
-  // Format a slot date string like "15_6_2025" → "15 Jun 2025"
   const slotDateFormat = (slotDate) => {
     const dateArray = slotDate.split('_')
     return dateArray[0] + ' ' + months[Number(dateArray[1])] + ' ' + dateArray[2]
   }
 
-  // Calculate age from a date-of-birth string
   const calculateAge = (dob) => {
-    const today = new Date()
+    const today     = new Date()
     const birthDate = new Date(dob)
-    const age = today.getFullYear() - birthDate.getFullYear()
+    let age = today.getFullYear() - birthDate.getFullYear()
+    const hasHadBirthdayThisYear =
+      today.getMonth() > birthDate.getMonth() ||
+      (today.getMonth() === birthDate.getMonth() && today.getDate() >= birthDate.getDate())
+    if (!hasHadBirthdayThisYear) age -= 1
     return age
   }
 
-  // Fetch doctors from backend (used once backend is connected)
   const getDoctorsData = async () => {
     try {
-      const { data } = await axios.get(backendUrl + '/api/doctor/list')
+      const { data } = await axiosInstance.get('/api/doctor/list')
       if (data.success) {
-        setDoctors(data.doctors)
+        setDoctors(data.data) // CHANGED: was data.doctors
       } else {
         toast.error(data.message)
       }
     } catch (error) {
-      // Backend not yet connected — silently keep mock data
-      console.log('Backend not connected, using mock data:', error.message)
+      console.error(error)
+      toast.error(getErrorMessage(error))
     }
   }
 
-  // Fetch the logged-in user's profile data
   const loadUserProfileData = async () => {
     try {
-      const { data } = await axios.get(backendUrl + '/api/user/get-profile', {
-        headers: { token }
-      })
+      const { data } = await axiosInstance.get('/api/user/get-profile')
       if (data.success) {
-        setUserData(data.userData)
+        setUserData(data.data) // CHANGED: was data.userData
       } else {
         toast.error(data.message)
       }
     } catch (error) {
-      console.log(error)
-      toast.error(error.message)
+      console.error(error)
+      if (error?.response?.status === 401) {
+        setToken(false)
+        setUserData(false)
+        localStorage.removeItem('accessToken')
+      } else {
+        toast.error(getErrorMessage(error))
+      }
     }
   }
 
-  // Fetch doctors on mount (will fall back to mock data if backend is unavailable)
   useEffect(() => {
     getDoctorsData()
   }, [])
 
-  // Reload user profile whenever auth token changes
   useEffect(() => {
     if (token) {
       loadUserProfileData()
@@ -85,7 +85,6 @@ const AppContextProvider = (props) => {
     doctors,
     getDoctorsData,
     currencySymbol,
-    backendUrl,
     token,
     setToken,
     userData,
@@ -103,3 +102,18 @@ const AppContextProvider = (props) => {
 }
 
 export default AppContextProvider
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

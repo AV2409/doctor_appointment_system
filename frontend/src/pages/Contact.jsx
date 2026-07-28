@@ -16,7 +16,7 @@ const Contact = () => {
         <img
           className='w-full max-w-[360px] rounded-lg object-cover'
           src={assets.contact_image}
-          alt='Contact Prescripto'
+          alt='Contact MediSync'
         />
 
         <div className='flex flex-col justify-center items-start gap-6'>
@@ -30,7 +30,7 @@ const Contact = () => {
           <p className='text-gray-500'>
             Tel: +1 (000) 000-0000
             <br />
-            Email: prescripto@gmail.com
+            Email: medisync@gmail.com
           </p>
 
           {/* Careers */}

@@ -16,11 +16,9 @@ import { upload } from "../middlewares/multer.middleware.js"
 
 const adminRouter = Router()
 
-// ─── Public ───────────────────────────────────────────────────────────────────
 adminRouter.post("/login",         loginAdmin)
 adminRouter.post("/refresh-token", refreshAdminAccessToken)
 
-// ─── Protected — ADMIN only ───────────────────────────────────────────────────
 adminRouter.post("/logout",             verifyJWT, authorize("ADMIN"), logoutAdmin)
 adminRouter.post("/add-doctor",         verifyJWT, authorize("ADMIN"), upload.single("image"), addDoctor)
 adminRouter.get("/all-doctors",         verifyJWT, authorize("ADMIN"), allDoctors)
@@ -28,8 +26,6 @@ adminRouter.get("/appointments",        verifyJWT, authorize("ADMIN"), appointme
 adminRouter.post("/cancel-appointment", verifyJWT, authorize("ADMIN"), appointmentCancel)
 adminRouter.get("/dashboard",           verifyJWT, authorize("ADMIN"), adminDashboard)
 
-// ADMIN or DOCTOR can change availability
-// changeAvailablity's internal role check ensures a DOCTOR can only change their own
 adminRouter.post("/change-availability", verifyJWT, authorize("ADMIN", "DOCTOR"), changeAvailablity)
 
 export default adminRouter

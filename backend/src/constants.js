@@ -1,1 +1,1 @@
-export const DB_NAME = "prescripto"
+export const DB_NAME = "medisync"

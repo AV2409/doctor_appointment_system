@@ -1,16 +1,24 @@
-import React, { useContext, useState } from 'react'
-import axios from 'axios'
+import React, { useContext, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import { AppContext } from '../context/AppContext'
 import { assets } from '../assets/assets'
+import axiosInstance from '../utils/axiosInstance' // replaces raw axios
+import { getErrorMessage } from '../utils/getErrorMessage'
 
 const MyProfile = () => {
-  const { userData, setUserData, backendUrl, token, loadUserProfileData } = useContext(AppContext)
-  const [isEdit, setIsEdit] = useState(false)
-  const [image, setImage]   = useState(false)
+  const { userData, setUserData, loadUserProfileData, token } = useContext(AppContext)
+  const navigate = useNavigate()
+  const [isEdit, setIsEdit]     = useState(false)
+  const [image, setImage]       = useState(false)
+  const [isSaving, setIsSaving] = useState(false) // prevents duplicate Save clicks
 
-  // ── Save updated profile to backend ──────────────────────────────────────
+  useEffect(() => {
+    if (token === false) navigate('/login')
+  }, [token])
+
   const updateUserProfileData = async () => {
+    setIsSaving(true)
     try {
       const formData = new FormData()
       formData.append('name', userData.name)
@@ -20,11 +28,7 @@ const MyProfile = () => {
       formData.append('gender', userData.gender)
       if (image) formData.append('image', image)
 
-      const { data } = await axios.post(
-        backendUrl + '/api/user/update-profile',
-        formData,
-        { headers: { token } }
-      )
+      const { data } = await axiosInstance.post('/api/user/update-profile', formData)
 
       if (data.success) {
         toast.success(data.message)
@@ -35,12 +39,13 @@ const MyProfile = () => {
         toast.error(data.message)
       }
     } catch (error) {
-      console.log(error)
-      toast.error(error.message)
+      console.error(error)
+      toast.error(getErrorMessage(error))
+    } finally {
+      setIsSaving(false)
     }
   }
 
-  // ── Guard: userData not yet loaded ────────────────────────────────────────
   if (!userData) {
     return (
       <div className='flex items-center justify-center min-h-[60vh] text-gray-400'>
@@ -202,9 +207,10 @@ const MyProfile = () => {
           <button
             id='profile-save'
             onClick={updateUserProfileData}
-            className='border border-primary px-8 py-2 rounded-full hover:bg-primary hover:text-white transition-all'
+            disabled={isSaving}
+            className='border border-primary px-8 py-2 rounded-full hover:bg-primary hover:text-white transition-all disabled:opacity-60 disabled:cursor-not-allowed'
           >
-            Save information
+            {isSaving ? 'Saving...' : 'Save information'}
           </button>
         ) : (
           <button
@@ -221,3 +227,22 @@ const MyProfile = () => {
 }
 
 export default MyProfile
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

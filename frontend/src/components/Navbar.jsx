@@ -2,16 +2,23 @@ import React, { useContext, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { AppContext } from '../context/AppContext'
 import { assets } from '../assets/assets'
+import axiosInstance from '../utils/axiosInstance' // replaces raw axios
 
 const Navbar = () => {
   const [showMenu, setShowMenu] = useState(false)
-  const { token, setToken, userData } = useContext(AppContext)
+  const { token, setToken, setUserData, userData } = useContext(AppContext)
   const navigate = useNavigate()
 
-  const logout = () => {
-    setToken(false)
-    localStorage.removeItem('token')
-    navigate('/')
+  const logout = async () => {
+    try {
+      await axiosInstance.post('/api/user/logout')
+    } catch (_) {
+    } finally {
+      setUserData(false)
+      setToken(false)
+      localStorage.removeItem('accessToken')
+      navigate('/')
+    }
   }
 
   return (
@@ -22,7 +29,7 @@ const Navbar = () => {
         onClick={() => navigate('/')}
         className='w-44 cursor-pointer'
         src={assets.logo}
-        alt='Prescripto logo'
+        alt='MediSync logo'
       />
 
       {/* ── Desktop nav links ── */}
@@ -118,7 +125,7 @@ const Navbar = () => {
           <img
             className='w-36'
             src={assets.logo}
-            alt='Prescripto logo'
+            alt='MediSync logo'
           />
           <img
             onClick={() => setShowMenu(false)}
@@ -131,10 +138,10 @@ const Navbar = () => {
         {/* Mobile nav links */}
         <ul className='flex flex-col items-start gap-2 mt-5 px-5 text-gray-600 font-medium'>
           {[
-            { to: '/',              label: 'HOME' },
-            { to: '/doctors',       label: 'ALL DOCTORS' },
-            { to: '/about',         label: 'ABOUT' },
-            { to: '/contact',       label: 'CONTACT' },
+            { to: '/',        label: 'HOME' },
+            { to: '/doctors', label: 'ALL DOCTORS' },
+            { to: '/about',   label: 'ABOUT' },
+            { to: '/contact', label: 'CONTACT' },
           ].map(({ to, label }) => (
             <NavLink
               key={to}
@@ -194,3 +201,16 @@ const Navbar = () => {
 }
 
 export default Navbar
+
+
+
+
+
+
+
+
+
+
+
+
+
